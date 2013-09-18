@@ -1,0 +1,5 @@
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager\bin\Debug\Sharp.MemoryManager.dll
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager\bin\Debug\Sharp.MemoryManager.pdb
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager\obj\Debug\Sharp.MemoryManager.dll
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager\obj\Debug\Sharp.MemoryManager.pdb
+C:\Users\data\Documents\Visual Studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager\obj\Debug\Sharp.MemoryManager.csprojResolveAssemblyReference.cache

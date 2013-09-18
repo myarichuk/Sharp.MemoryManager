@@ -1,0 +1,10 @@
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\bin\Debug\Sharp.MemoryManager.Tests.dll
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\bin\Debug\Sharp.MemoryManager.Tests.pdb
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\obj\Debug\Sharp.MemoryManager.Tests.csprojResolveAssemblyReference.cache
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\obj\Debug\Sharp.MemoryManager.Tests.dll
+c:\users\data\documents\visual studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\obj\Debug\Sharp.MemoryManager.Tests.pdb
+c:\Users\data\Documents\Visual Studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\bin\Debug\Sharp.MemoryManager.dll
+c:\Users\data\Documents\Visual Studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\bin\Debug\Sharp.MemoryManager.pdb
+C:\Users\data\Documents\Visual Studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\bin\Debug\FluentAssertions.dll
+C:\Users\data\Documents\Visual Studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\bin\Debug\FluentAssertions.pdb
+C:\Users\data\Documents\Visual Studio 2012\Projects\Sharp.Interprocess\Sharp.MemoryManager.Tests\bin\Debug\FluentAssertions.xml

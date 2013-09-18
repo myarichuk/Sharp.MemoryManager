@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Express 2012 for Windows Desktop
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sharp.MemoryManager", "Sharp.MemoryManager\Sharp.MemoryManager.csproj", "{D81799EF-8724-485F-9684-A54498AEC9DD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sharp.MemoryManager.Tests", "Sharp.MemoryManager.Tests\Sharp.MemoryManager.Tests.csproj", "{5BB0FA5D-0999-4824-9E11-7AF7490F0440}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D81799EF-8724-485F-9684-A54498AEC9DD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D81799EF-8724-485F-9684-A54498AEC9DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D81799EF-8724-485F-9684-A54498AEC9DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D81799EF-8724-485F-9684-A54498AEC9DD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5BB0FA5D-0999-4824-9E11-7AF7490F0440}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5BB0FA5D-0999-4824-9E11-7AF7490F0440}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5BB0FA5D-0999-4824-9E11-7AF7490F0440}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5BB0FA5D-0999-4824-9E11-7AF7490F0440}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
