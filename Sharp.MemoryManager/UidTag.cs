@@ -9,25 +9,16 @@ namespace Sharp.MemoryManager
 	//unique id tag --> provides unique "timestamp"
 	public class UidTag : IEquatable<UidTag>,IComparable<UidTag>,IComparable
 	{
-		private static StringBuilder m_StringBuilder;
 		private const string Delimiter = "-";
 		private string m_UidTag;
 		private long m_Ticks;
 		private long m_AtomicId;
 
-		static UidTag()
-		{
-			m_StringBuilder = new StringBuilder();
-		}
-
 		internal UidTag(long ticks, int atomicId)
 		{
 			m_Ticks = ticks;
 			m_AtomicId = atomicId;
-			m_UidTag  = m_StringBuilder.Append(ticks)
-									   .Append(Delimiter)
-						               .Append(atomicId)
-									   .ToString();
+			m_UidTag = ticks + Delimiter + atomicId;
 		}
 
 		#region Object Overrides & Interface implementations

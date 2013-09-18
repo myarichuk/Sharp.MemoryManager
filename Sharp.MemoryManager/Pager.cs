@@ -104,19 +104,20 @@ namespace Sharp.MemoryManager
 					m_StorageHeader->PageDataSize = pageDataSize;
 					m_StorageHeader->FreePageCount = pageCount;
 					
-					m_StorageHeader->FreePageOffsets = (int*)(m_BaseStoragePointer + 
+					m_StorageHeader->FreePageFlags = (bool*)(m_BaseStoragePointer + 
 															  Constants.Signature.Length + 
 															  Constants.StorageHeaderSize);
 					
 					m_StorageHeader->PageOffsets = (int*)(m_BaseStoragePointer + 														   
 														  Constants.Signature.Length + 
 														  Constants.StorageHeaderSize +
-														  (Constants.SizeOfInt * pageCount));
+														  (Constants.SizeOfBool * pageCount));
 					
 					m_StorageHeader->PageHeaderOffsets = (int*)(m_BaseStoragePointer +
 																Constants.Signature.Length +
 																Constants.StorageHeaderSize +
-																(Constants.SizeOfInt * pageCount * 2));
+																(Constants.SizeOfBool * pageCount) +
+																(Constants.SizeOfInt * pageCount));
 
 					FirstTimeInitialize_PageOffsetTable();
 				}
@@ -130,11 +131,12 @@ namespace Sharp.MemoryManager
 		private void FirstTimeInitialize_PageOffsetTable()
 		{
 			var pageSetOffset = OffsetByPageSet(PageSet.SetA);
+			m_StorageHeader->LastFreePageNum = 0;
 			for (int pageNum = 0; pageNum < m_StorageHeader->TotalPageCount; pageNum++)
 			{
 				m_StorageHeader->PageHeaderOffsets[pageNum] = pageSetOffset + PageHeaderOffset(pageNum);
 				m_StorageHeader->PageOffsets[pageNum] = pageSetOffset + PageDataOffset(pageNum);
-				m_StorageHeader->FreePageOffsets[pageNum] = pageSetOffset + PageDataOffset(pageNum);
+				m_StorageHeader->FreePageFlags[pageNum] = true;
 			}
 		}
 
@@ -147,9 +149,22 @@ namespace Sharp.MemoryManager
 			throw new NotImplementedException();
 		}
 
-		public byte[] Get(DataHandle handle)
+		public IEnumerable<byte> Get(DataHandle handle)
 		{
-			throw new NotImplementedException();
+			var data = new byte[handle.PageNum.Count() * m_StorageHeader->PageDataSize];
+			var actualDataSize = 0;
+			foreach (var pageNum in handle.PageNum)
+			{
+				var pageHeader = (PageHeader*)(m_BaseStoragePointer + m_StorageHeader->PageHeaderOffsets[pageNum]);
+				var pageData = m_BaseStoragePointer + m_StorageHeader->PageOffsets[pageNum];
+				
+				fixed (byte* dataPtr = data)
+					NativeMethods.memcpy(dataPtr + actualDataSize, pageData, pageHeader->DataSize);
+				
+				actualDataSize += pageHeader->DataSize;
+			}
+
+			return data.Take(actualDataSize);
 		}
 
 		public void Set(Transaction tx, DataHandle handle, byte[] data, bool shouldUseConcurrencyTag = false)
@@ -167,10 +182,15 @@ namespace Sharp.MemoryManager
 				var allocatedPageNum = new List<int>((requestedSize / m_StorageHeader->PageDataSize) + 1);
 				do
 				{
-					allocatedPageNum.Add(m_StorageHeader->FreePageOffsets[m_StorageHeader->FreePageCount--]);
+					var pageNum = FindAndMarkFreePageNum();
+					if (pageNum == -1)
+						throw new OutOfMemoryException("unable to allocate more pages");
+					allocatedPageNum.Add(pageNum);
 					alreadyAllocatedSize += pageDataSize;
 				} while (alreadyAllocatedSize < requestedSize);
 
+				m_StorageHeader->LastFreePageNum = allocatedPageNum.Max();
+				m_StorageHeader->FreePageCount -= allocatedPageNum.Count;
 				return new DataHandle(allocatedPageNum);
 			}
 		}
@@ -183,13 +203,32 @@ namespace Sharp.MemoryManager
 					throw new ApplicationException("Attempt to free more pages than total amount of pages. Something is very wrong..");
 
 				foreach (var pageNum in handle.PageNum)
-					m_StorageHeader->FreePageOffsets[m_StorageHeader->FreePageCount++] = m_StorageHeader->PageOffsets[pageNum];
+					m_StorageHeader->FreePageFlags[pageNum] = true;
+
+				handle.IsValid = false;
+				m_StorageHeader->FreePageCount += handle.PageNum.Count();
+				m_StorageHeader->LastFreePageNum = handle.PageNum.Min();
 			}
 		}
 
 		#endregion
 
 		#region Helper Methods
+
+		//TODO : optimize this to make complexity less than O(n)
+		private int FindAndMarkFreePageNum()
+		{
+			for (int pageNum = m_StorageHeader->LastFreePageNum; pageNum < m_StorageHeader->TotalPageCount; pageNum++)
+				if (m_StorageHeader->FreePageFlags[pageNum])
+				{
+					m_StorageHeader->LastFreePageNum = pageNum;
+					m_StorageHeader->FreePageFlags[pageNum] = false;
+					return pageNum;
+				}
+
+			m_StorageHeader->LastFreePageNum = m_StorageHeader->TotalPageCount - 1;
+			return -1;
+		}
 
 		private PageSet PageSetByOffset(int offset)
 		{

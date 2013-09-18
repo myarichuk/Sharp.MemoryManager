@@ -8,13 +8,14 @@ using System.Threading.Tasks;
 namespace Sharp.MemoryManager
 {
 	[StructLayout(LayoutKind.Sequential,Pack = 1)]
-	public  unsafe struct StorageHeader
+	public unsafe struct StorageHeader
 	{
 		public int Version;
 		public int PageDataSize;
 		public int TotalPageCount;
+		public int LastFreePageNum;
 		public int FreePageCount;
-		public int* FreePageOffsets;
+		public bool* FreePageFlags;
 		public int* PageOffsets;
 		public int* PageHeaderOffsets;
 	}

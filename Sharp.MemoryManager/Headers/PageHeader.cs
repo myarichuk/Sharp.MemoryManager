@@ -8,9 +8,9 @@ using System.Threading.Tasks;
 namespace Sharp.MemoryManager
 {
 	[StructLayout(LayoutKind.Sequential, Pack = 1)]
-	public struct PageHeader
+	public unsafe struct PageHeader
 	{
-		public UidTag Tag;
+		public fixed byte UidTag[40];
 		public int DataSize;
 	}
 }

@@ -43,6 +43,7 @@ namespace Sharp.MemoryManager.Tests
 				for(int allocationIndex = 0; allocationIndex < 4; allocationIndex++)
 					allocatedHandles.Add(pager.Allocate(ALLOCATION_SIZE));
 
+				allocatedHandles.SelectMany(handle => handle.PageNum).Should().OnlyHaveUniqueItems();
 				allocatedHandles.ForEach(handle => handle.PageNum.Should().OnlyHaveUniqueItems());
 				allocatedHandles.ForEach(handle => ALLOCATION_SIZE.Should().BeLessOrEqualTo(handle.PageNum.Count() * pager.PageDataSize));
 			}
@@ -61,6 +62,10 @@ namespace Sharp.MemoryManager.Tests
 				pager.Free(handle2);
 
 				handle1.PageNum.ShouldBeEquivalentTo(handle2.PageNum);
+
+				handle1.IsValid.Should().BeFalse();
+				handle2.IsValid.Should().BeFalse();
+
 			}
 		}
 	
