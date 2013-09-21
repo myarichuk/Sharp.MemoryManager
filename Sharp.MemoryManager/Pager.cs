@@ -13,8 +13,9 @@ namespace Sharp.MemoryManager
 {
 	public unsafe class Pager : IDisposable
 	{
-		#region Constants		
-		private const string MUTEX_SUFFIX = "_SYNC_MUTEX";
+		#region Constants
+		private const string PAGE_CHANGE_MUTEX_SUFFIX = "_CHANGES_SYNC_MUTEX";
+		private const string TRANSACTION_MUTEX_SUFFIX = "_TRANSACTION_SYNC_MUTEX";
 		private const int PAGE_DATA_SIZE = 8; //8 bytes in each page
 		private const double FREE_SPACE_MARGIN_PERCENT = 1.1; //how much free space to reserve in hard drive
 		#endregion
@@ -28,8 +29,9 @@ namespace Sharp.MemoryManager
 		private StorageHeader* m_StorageHeader;
 		private MemoryMappedFile m_PagerStorage;
 		private MemoryMappedViewAccessor m_PageStorageViewAccessor;
-		private readonly SyncProvider m_SyncProvider;
-		private bool m_IsDisposed;
+		private readonly SyncProvider m_PageChangeSyncProvider;
+		private readonly SyncProvider m_TransactionSyncProvider;
+		private volatile bool m_IsDisposed;
 		private readonly string m_StorageName;
 		private long m_TotalPagerSize;
 
@@ -41,8 +43,8 @@ namespace Sharp.MemoryManager
 		{
 			m_StorageName = storageName;			
 
-			m_SyncProvider = new SyncProvider(storageName + MUTEX_SUFFIX);
-	
+			m_PageChangeSyncProvider = new SyncProvider(storageName + PAGE_CHANGE_MUTEX_SUFFIX);
+			m_TransactionSyncProvider = new SyncProvider(storageName + TRANSACTION_MUTEX_SUFFIX);
 			InitializeStorage(firstTimeInit: true,
 							  pageDataSize : PAGE_DATA_SIZE,
 							  capacity: dataCapacity);
@@ -75,7 +77,7 @@ namespace Sharp.MemoryManager
 
 		private void InitializeStorage(int capacity,int pageDataSize, bool firstTimeInit = false)
 		{
-			using (var @lock = m_SyncProvider.Lock())
+			using (var @lock = m_PageChangeSyncProvider.Lock())
 			{
 				var pageCount = capacity / pageDataSize;
 				m_TotalPagerSize = Constants.Signature.Length +
@@ -146,16 +148,31 @@ namespace Sharp.MemoryManager
 
 		public Transaction NewTransaction()
 		{
-			throw new NotImplementedException();
+			ThrowIfDisposed();
+			var syncReleaseObj = m_TransactionSyncProvider.Lock();
+
+			return new Transaction(() => syncReleaseObj.Dispose());
 		}
 
-		public IEnumerable<byte> Get(DataHandle handle)
+		public IEnumerable<byte> Get(DataHandle handle,bool shouldUseConcurrencyTag = false)
 		{
-			var data = new byte[handle.PageNum.Count() * m_StorageHeader->PageDataSize];
+			Validate(handle);
+			ThrowIfDisposed();
+			if (!ArePagesAllocated(handle))
+				return null;
+
+			var data = new byte[handle.Pages.Count() * m_StorageHeader->PageDataSize];
 			var actualDataSize = 0;
-			foreach (var pageNum in handle.PageNum)
+			foreach (var pageNum in handle.Pages)
 			{
 				var pageHeader = (PageHeader*)(m_BaseStoragePointer + m_StorageHeader->PageHeaderOffsets[pageNum]);
+
+				//check the tag only once, assumption that all allocated pages have their tag changed together (when Set() method executes)
+				if (shouldUseConcurrencyTag && new UidTag(pageHeader->TagBytes) != handle.Tag) 
+				{
+					throw new ConcurrencyException("cannot fetch data, it has been changed - concurrency tags mismatch");
+				}
+
 				var pageData = m_BaseStoragePointer + m_StorageHeader->PageOffsets[pageNum];
 				
 				fixed (byte* dataPtr = data)
@@ -169,13 +186,24 @@ namespace Sharp.MemoryManager
 
 		public void Set(Transaction tx, DataHandle handle, byte[] data, bool shouldUseConcurrencyTag = false)
 		{
+			Validate(handle,data);
+			ThrowIfDisposed();
 			//do not forget to check data size and allocated page size (that in handle)
+			throw new NotImplementedException();
+		}
+
+		public void Delete(Transaction tx, DataHandle handle, bool shouldUseConcurrencyTag = false)
+		{
+			Validate(handle);
+			ThrowIfDisposed();
+
 			throw new NotImplementedException();
 		}
 
 		public DataHandle Allocate(int requestedSize)
 		{
-			using (var @lock = m_SyncProvider.Lock())
+			ThrowIfDisposed();
+			using (var @lock = m_PageChangeSyncProvider.Lock())
 			{
 				var alreadyAllocatedSize = 0;
 				var pageDataSize = m_StorageHeader->PageDataSize;
@@ -185,6 +213,7 @@ namespace Sharp.MemoryManager
 					var pageNum = FindAndMarkFreePageNum();
 					if (pageNum == -1)
 						throw new OutOfMemoryException("unable to allocate more pages");
+
 					allocatedPageNum.Add(pageNum);
 					alreadyAllocatedSize += pageDataSize;
 				} while (alreadyAllocatedSize < requestedSize);
@@ -197,23 +226,59 @@ namespace Sharp.MemoryManager
 
 		public void Free(DataHandle handle)
 		{
-			using (var @lock = m_SyncProvider.Lock())
+			Validate(handle);
+			ThrowIfDisposed();
+			using (var @lock = m_PageChangeSyncProvider.Lock())
 			{
-				if (handle.PageNum.Count() > m_StorageHeader->TotalPageCount - m_StorageHeader->FreePageCount)
+				if (handle.Pages.Count() > m_StorageHeader->TotalPageCount - m_StorageHeader->FreePageCount)
 					throw new ApplicationException("Attempt to free more pages than total amount of pages. Something is very wrong..");
 
-				foreach (var pageNum in handle.PageNum)
+				foreach (var pageNum in handle.Pages)
 					m_StorageHeader->FreePageFlags[pageNum] = true;
 
 				handle.IsValid = false;
-				m_StorageHeader->FreePageCount += handle.PageNum.Count();
-				m_StorageHeader->LastFreePageNum = handle.PageNum.Min();
+				m_StorageHeader->FreePageCount += handle.Pages.Count();
+				m_StorageHeader->LastFreePageNum = handle.Pages.Min();
 			}
 		}
 
 		#endregion
 
+		#region Transaction Related Methods
+
+		internal int CopyPageAndFetchOffset(int pageNum)
+		{
+			var pageSet = PageSetByOffset(m_StorageHeader->PageOffsets[pageNum]);
+			m_BasePointerForPageSetA
+		}
+
+		#endregion
+
 		#region Helper Methods
+
+		private bool ArePagesAllocated(DataHandle handle)
+		{
+			foreach (var pageNum in handle.Pages)
+				if (m_StorageHeader->FreePageFlags[pageNum])
+					return false;
+
+			return true;
+		}
+
+		private void Validate(DataHandle handle, byte[] data = null)
+		{
+			if (!handle.IsValid)
+				throw new InvalidDataException("data handle is marked invalid (pages already freed?)");
+
+			if (data != null && (handle.Pages.Count() * m_StorageHeader->PageDataSize) > data.Length)
+				throw new ArgumentOutOfRangeException("size of data must be equal or less to total page size in the data handle");
+		}
+
+		private void ThrowIfDisposed()
+		{
+			if (m_IsDisposed)
+				throw new ApplicationException("Pager is already disposed.");
+		}
 
 		//TODO : optimize this to make complexity less than O(n)
 		private int FindAndMarkFreePageNum()
@@ -303,6 +368,11 @@ namespace Sharp.MemoryManager
 		{
 			if (!m_IsDisposed)
 			{
+				if (m_TransactionSyncProvider != null)
+				{
+					m_TransactionSyncProvider.Dispose();
+				}
+
 				if (m_PageStorageViewAccessor != null)
 				{
 					m_PageStorageViewAccessor.SafeMemoryMappedViewHandle.ReleasePointer();
@@ -314,9 +384,9 @@ namespace Sharp.MemoryManager
 					m_PagerStorage.Dispose();
 				}
 
-				if (m_SyncProvider != null)
+				if (m_PageChangeSyncProvider != null)
 				{
-					m_SyncProvider.Dispose();
+					m_PageChangeSyncProvider.Dispose();
 				}
 				
 				m_IsDisposed = true;

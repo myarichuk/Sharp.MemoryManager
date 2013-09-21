@@ -12,7 +12,17 @@ namespace Sharp.MemoryManager
 		private const string Delimiter = "-";
 		private string m_UidTag;
 		private long m_Ticks;
-		private long m_AtomicId;
+		private int m_AtomicId;
+
+		internal UidTag(byte[] tagBytes)
+		{
+			m_UidTag = Encoding.Unicode.GetString(tagBytes);
+			var elements = m_UidTag.Split(Delimiter.First()).ToArray();
+			if (elements.Length != 2 || 
+				!long.TryParse(elements[0], out m_Ticks) ||
+				!int.TryParse(elements[1],out m_AtomicId))
+					throw new ArgumentException("invalid tag was parsed from bytes");
+		}
 
 		internal UidTag(long ticks, int atomicId)
 		{

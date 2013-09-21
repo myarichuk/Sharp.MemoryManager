@@ -11,8 +11,7 @@ namespace Sharp.MemoryManager
 	public class SyncProvider : IDisposable
 	{
 		private Mutex m_ProviderMutex;
-		private bool m_IsDisposed;
-		private const int DEFAULT_LOCK_TIMEOUT = 60000;
+		private bool m_IsDisposed;		
 		private string m_ProviderName;
 
 		public SyncProvider(string providerName)
@@ -24,7 +23,7 @@ namespace Sharp.MemoryManager
 			m_IsDisposed = false;
 		}
 
-		public IDisposable Lock(int lockTimeout = DEFAULT_LOCK_TIMEOUT)
+		public IDisposable Lock(int lockTimeout = Constants.DefaultLockTimeout)
 		{
 			if (!m_ProviderMutex.WaitOne(lockTimeout))
 			{

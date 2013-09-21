@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using FluentAssertions;
 using System.Collections.Generic;
+using System.IO;
 
 namespace Sharp.MemoryManager.Tests
 {
@@ -25,9 +26,9 @@ namespace Sharp.MemoryManager.Tests
 			using (var pager = new Pager("TestStorage", 1024)) 
 			{
 				var handle = pager.Allocate(ALLOCATION_SIZE);
-				var totalAllocatedSize = handle.PageNum.Count() * pager.PageDataSize;
+				var totalAllocatedSize = handle.Pages.Count() * pager.PageDataSize;
 
-				handle.PageNum.Should().OnlyHaveUniqueItems();
+				handle.Pages.Should().OnlyHaveUniqueItems();
 				totalAllocatedSize.Should().BeGreaterOrEqualTo(ALLOCATION_SIZE);	
 			} 
 		}
@@ -43,9 +44,23 @@ namespace Sharp.MemoryManager.Tests
 				for(int allocationIndex = 0; allocationIndex < 4; allocationIndex++)
 					allocatedHandles.Add(pager.Allocate(ALLOCATION_SIZE));
 
-				allocatedHandles.SelectMany(handle => handle.PageNum).Should().OnlyHaveUniqueItems();
-				allocatedHandles.ForEach(handle => handle.PageNum.Should().OnlyHaveUniqueItems());
-				allocatedHandles.ForEach(handle => ALLOCATION_SIZE.Should().BeLessOrEqualTo(handle.PageNum.Count() * pager.PageDataSize));
+				allocatedHandles.SelectMany(handle => handle.Pages).Should().OnlyHaveUniqueItems();
+				allocatedHandles.ForEach(handle => handle.Pages.Should().OnlyHaveUniqueItems());
+				allocatedHandles.ForEach(handle => ALLOCATION_SIZE.Should().BeLessOrEqualTo(handle.Pages.Count() * pager.PageDataSize));
+			}
+		}
+
+
+		[TestMethod]
+		public void Pager_Allocation_Freeing_Cannot_Free_Twice()
+		{
+			const int ALLOCATION_SIZE = 128;
+			using (var pager = new Pager("TestStorage", 1024))
+			{
+				var handle = pager.Allocate(ALLOCATION_SIZE);
+				pager.Free(handle);
+
+				Assert.Throws<InvalidDataException>(() => pager.Free(handle));
 			}
 		}
 
@@ -61,7 +76,7 @@ namespace Sharp.MemoryManager.Tests
 				var handle2 = pager.Allocate(ALLOCATION_SIZE);
 				pager.Free(handle2);
 
-				handle1.PageNum.ShouldBeEquivalentTo(handle2.PageNum);
+				handle1.Pages.ShouldBeEquivalentTo(handle2.Pages);
 
 				handle1.IsValid.Should().BeFalse();
 				handle2.IsValid.Should().BeFalse();

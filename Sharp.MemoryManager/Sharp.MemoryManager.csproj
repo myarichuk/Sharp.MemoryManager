@@ -41,8 +41,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ConcurrencyException.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="DataObjects\DataHandle.cs" />
+    <Compile Include="DataObjects\OperationType.cs" />
     <Compile Include="Headers\PageHeader.cs" />
     <Compile Include="Headers\StorageHeader.cs" />
     <Compile Include="PageSet.cs" />
