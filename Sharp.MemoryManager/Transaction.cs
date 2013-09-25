@@ -9,19 +9,22 @@ namespace Sharp.MemoryManager
 {
 	public class Transaction : IDisposable
 	{
-		//page info : page number -> page offset
-		private ConcurrentDictionary<int,int> m_ParticipatingPages;
+		//page info : page number -> page offsets
+		private ConcurrentDictionary<int, PageOffsets> m_ParticipatingPages;
 		private Action m_TransactionRelease;
+		private Func<int, PageOffsets> HandleParticipatingPages;
 
-		internal Transaction(Action transactionRelease)
+		internal Transaction(Action transactionRelease, Func<int,PageOffsets> handleParticipatingPages)
 		{
-			m_ParticipatingPages = new ConcurrentDictionary<int,int>();
+			m_ParticipatingPages = new ConcurrentDictionary<int,PageOffsets>();
 			m_TransactionRelease = transactionRelease;
+			HandleParticipatingPages = handleParticipatingPages;
 		}
 
 		internal void CopyParticipatingPages(DataHandle handle)
 		{
-
+			foreach (var pageNum in handle.Pages)
+				m_ParticipatingPages.GetOrAdd(pageNum,HandleParticipatingPages(pageNum));
 		}
 		
 		public void Dispose()

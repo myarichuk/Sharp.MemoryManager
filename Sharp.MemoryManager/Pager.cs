@@ -23,8 +23,6 @@ namespace Sharp.MemoryManager
 		#region Private Members
 
 		private byte* m_BaseStoragePointer;
-		private byte* m_BasePointerForPageSetA;
-		private byte* m_BasePointerForPageSetB;
 
 		private StorageHeader* m_StorageHeader;
 		private MemoryMappedFile m_PagerStorage;
@@ -34,6 +32,8 @@ namespace Sharp.MemoryManager
 		private volatile bool m_IsDisposed;
 		private readonly string m_StorageName;
 		private long m_TotalPagerSize;
+		private int m_BaseOffsetOfSetA;
+		private int m_BaseOffsetOfSetB;
 
 		#endregion
 
@@ -121,23 +121,30 @@ namespace Sharp.MemoryManager
 																(Constants.SizeOfBool * pageCount) +
 																(Constants.SizeOfInt * pageCount));
 
+					m_BaseOffsetOfSetA = Constants.Signature.Length +
+										 Constants.StorageHeaderSize +
+										 (Constants.SizeOfBool * pageCount) +
+										 (Constants.SizeOfInt * pageCount * 2);
+
+					m_BaseOffsetOfSetB = m_BaseOffsetOfSetA +
+										 (Constants.PageHeaderSize * pageCount) +
+										 (pageDataSize * pageCount);
+
 					FirstTimeInitialize_PageOffsetTable();
 				}
 
-				m_BasePointerForPageSetA = m_BaseStoragePointer + OffsetByPageSet(PageSet.SetA);
-				m_BasePointerForPageSetB = m_BaseStoragePointer + OffsetByPageSet(PageSet.SetB);
 			}
 		}
 
 		
 		private void FirstTimeInitialize_PageOffsetTable()
 		{
-			var pageSetOffset = OffsetByPageSet(PageSet.SetA);
+			var pageSetOffset = BaseOffsetByPageSet(PageSet.SetA);
 			m_StorageHeader->LastFreePageNum = 0;
 			for (int pageNum = 0; pageNum < m_StorageHeader->TotalPageCount; pageNum++)
 			{
-				m_StorageHeader->PageHeaderOffsets[pageNum] = pageSetOffset + PageHeaderOffset(pageNum);
-				m_StorageHeader->PageOffsets[pageNum] = pageSetOffset + PageDataOffset(pageNum);
+				m_StorageHeader->PageHeaderOffsets[pageNum] = pageSetOffset + PageHeaderRelativeOffset(pageNum);
+				m_StorageHeader->PageOffsets[pageNum] = pageSetOffset + PageDataRelativeOffset(pageNum);
 				m_StorageHeader->FreePageFlags[pageNum] = true;
 			}
 		}
@@ -151,7 +158,7 @@ namespace Sharp.MemoryManager
 			ThrowIfDisposed();
 			var syncReleaseObj = m_TransactionSyncProvider.Lock();
 
-			return new Transaction(() => syncReleaseObj.Dispose());
+			return new Transaction(syncReleaseObj.Dispose,CopyPageAndFetchOffset);
 		}
 
 		public IEnumerable<byte> Get(DataHandle handle,bool shouldUseConcurrencyTag = false)
@@ -188,6 +195,8 @@ namespace Sharp.MemoryManager
 		{
 			Validate(handle,data);
 			ThrowIfDisposed();
+			
+
 			//do not forget to check data size and allocated page size (that in handle)
 			throw new NotImplementedException();
 		}
@@ -246,10 +255,24 @@ namespace Sharp.MemoryManager
 
 		#region Transaction Related Methods
 
-		internal int CopyPageAndFetchOffset(int pageNum)
+		private PageOffsets CopyPageAndFetchOffset(int pageNum)
 		{
-			var pageSet = PageSetByOffset(m_StorageHeader->PageOffsets[pageNum]);
-			m_BasePointerForPageSetA
+			var sourceSet = PageSetByAbsoluteOffset(m_StorageHeader->PageOffsets[pageNum]);
+			if (sourceSet == PageSet.NotASet) throw new InvalidDataException("Invalid page set for page number = " + pageNum);
+
+			var destinationSet = sourceSet == PageSet.SetA ? PageSet.SetB : PageSet.SetA;
+			var destPageHeaderOffset = BaseOffsetByPageSet(destinationSet) + PageHeaderRelativeOffset(pageNum);
+			var destPageDataOffset = BaseOffsetByPageSet(destinationSet) + PageDataRelativeOffset(pageNum);
+
+			//copy page header 
+			NativeMethods.memcpy(m_BaseStoragePointer + m_StorageHeader->PageHeaderOffsets[pageNum],
+								 m_BaseStoragePointer + destPageHeaderOffset, Constants.PageHeaderSize);
+
+			//copy page data
+			NativeMethods.memcpy(m_BaseStoragePointer + m_StorageHeader->PageOffsets[pageNum],
+								 m_BaseStoragePointer + destPageDataOffset, m_StorageHeader->PageDataSize);
+
+			return new PageOffsets(destPageHeaderOffset,destPageDataOffset);
 		}
 
 		#endregion
@@ -295,47 +318,35 @@ namespace Sharp.MemoryManager
 			return -1;
 		}
 
-		private PageSet PageSetByOffset(int offset)
+		private PageSet PageSetByAbsoluteOffset(int offset)
 		{
-			if (offset < OffsetByPageSet(PageSet.SetA))
+			if (offset < BaseOffsetByPageSet(PageSet.SetA))
 				return PageSet.NotASet;
 
-			if (offset < OffsetByPageSet(PageSet.SetB))
+			if (offset < BaseOffsetByPageSet(PageSet.SetB))
 				return PageSet.SetA;
 			else
 				return PageSet.SetB;
 		}
 
-		private int OffsetByPageSet(PageSet set)
+		private int BaseOffsetByPageSet(PageSet set)
 		{
 			if (set == PageSet.SetA)
-			{
-				return Constants.Signature.Length +
-					   Constants.StorageHeaderSize +
-					   (Constants.SizeOfInt * m_StorageHeader->TotalPageCount * 2); //free page offset table + page offset table					   
-			}
+				return m_BaseOffsetOfSetA; //free page offset table + page offset table					   
 			else if (set == PageSet.SetB)
-			{
-				return Constants.Signature.Length +
-					   Constants.StorageHeaderSize +
-					   (Constants.SizeOfInt * m_StorageHeader->TotalPageCount * 2) + //free page offset table and page offset table
-					   (Constants.PageHeaderSize * m_StorageHeader->TotalPageCount) +
-					   (m_StorageHeader->PageDataSize * m_StorageHeader->TotalPageCount);
-			}
+				return m_BaseOffsetOfSetB;
 			else
-			{
 				throw new ApplicationException("undefined page set");
-			}
 		}
 
-		private int PageHeaderOffset(int pageNum)
+		private int PageHeaderRelativeOffset(int pageNum)
 		{
 			return Constants.PageHeaderSize * pageNum;
 		}
 
-		private int PageDataOffset(int pageNum)
+		private int PageDataRelativeOffset(int pageNum)
 		{
-			return m_StorageHeader->PageDataSize * pageNum;
+			return (Constants.PageHeaderSize * m_StorageHeader->TotalPageCount) + (m_StorageHeader->PageDataSize * pageNum);
 		}
 
 		private static void CheckDiskFreeSpaceAndThrowIfNeeded(long size)

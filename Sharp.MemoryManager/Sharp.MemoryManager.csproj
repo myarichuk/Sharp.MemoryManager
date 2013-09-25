@@ -47,6 +47,7 @@
     <Compile Include="DataObjects\OperationType.cs" />
     <Compile Include="Headers\PageHeader.cs" />
     <Compile Include="Headers\StorageHeader.cs" />
+    <Compile Include="DataObjects\PageOffsets.cs" />
     <Compile Include="PageSet.cs" />
     <Compile Include="Pager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
