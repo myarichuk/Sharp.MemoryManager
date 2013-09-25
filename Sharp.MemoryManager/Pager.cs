@@ -252,7 +252,7 @@ namespace Sharp.MemoryManager
 		}
 
 		#endregion
-
+		//6e545ec
 		#region Transaction Related Methods
 
 		private PageOffsets CopyPageAndFetchOffset(int pageNum)
