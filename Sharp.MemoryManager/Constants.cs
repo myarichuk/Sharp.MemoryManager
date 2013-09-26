@@ -16,5 +16,6 @@ namespace Sharp.MemoryManager
 		public static readonly int SizeOfInt = Marshal.SizeOf(typeof(int));
 		public static readonly int SizeOfBool = Marshal.SizeOf(typeof(bool));
 		public const int DefaultLockTimeout = 60000;
+		public const int NoLockTimeout = Int32.MinValue;
 	}
 }

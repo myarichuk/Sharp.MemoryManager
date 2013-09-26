@@ -11,26 +11,41 @@ namespace Sharp.MemoryManager
 	{
 		//page info : page number -> page offsets
 		private ConcurrentDictionary<int, PageOffsets> m_ParticipatingPages;
-		private Action m_TransactionRelease;
+		private Action TransactionRelease;
 		private Func<int, PageOffsets> HandleParticipatingPages;
 
 		internal Transaction(Action transactionRelease, Func<int,PageOffsets> handleParticipatingPages)
 		{
 			m_ParticipatingPages = new ConcurrentDictionary<int,PageOffsets>();
-			m_TransactionRelease = transactionRelease;
+			TransactionRelease = transactionRelease;
 			HandleParticipatingPages = handleParticipatingPages;
 		}
 
-		internal void CopyParticipatingPages(DataHandle handle)
+		//if pages are already copied - do nothing
+		internal IDictionary<int,PageOffsets> CopyPagesAndFetchOffsets(DataHandle handle)
 		{
-			foreach (var pageNum in handle.Pages)
-				m_ParticipatingPages.GetOrAdd(pageNum,HandleParticipatingPages(pageNum));
+			var handlePageOffsets = new Dictionary<int, PageOffsets>();
+			if (!m_ParticipatingPages.Any(pageNumWithOffsetsPair => handle.Pages.Contains(pageNumWithOffsetsPair.Key)))
+				foreach (var pageNum in handle.Pages)
+					handlePageOffsets.Add(pageNum, m_ParticipatingPages.GetOrAdd(pageNum, HandleParticipatingPages(pageNum)));
+			else
+				handlePageOffsets = m_ParticipatingPages.Where(pageNumWithOffsetsPair => handle.Pages.Contains(pageNumWithOffsetsPair.Key))
+														.ToDictionary(pageNumWithOffsetsPair => pageNumWithOffsetsPair.Key,
+																	  pageNumWithOffsetsPair => pageNumWithOffsetsPair.Value);
+
+			return handlePageOffsets;
+		}		
+
+		public void Commit()
+		{			
+			throw new NotImplementedException();
+			TransactionRelease();
 		}
-		
+
 		public void Dispose()
 		{
-			if(m_TransactionRelease != null)
-				m_TransactionRelease();
+			if(TransactionRelease != null)
+				TransactionRelease();
 		}
 	}
 }

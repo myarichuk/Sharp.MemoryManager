@@ -25,7 +25,10 @@ namespace Sharp.MemoryManager
 
 		public IDisposable Lock(int lockTimeout = Constants.DefaultLockTimeout)
 		{
-			if (!m_ProviderMutex.WaitOne(lockTimeout))
+			if (lockTimeout <= 0)
+				throw new ArgumentOutOfRangeException("lockTimeout should be larger than 0");
+
+			if (lockTimeout != Constants.NoLockTimeout && !m_ProviderMutex.WaitOne(lockTimeout))
 			{
 				throw new TimeoutException("Timed out while tryign to acquire exclusive lock, for mutex (name = " + m_ProviderName + ")");
 			}

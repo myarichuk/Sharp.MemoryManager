@@ -17,7 +17,7 @@ namespace Sharp.MemoryManager
 		{
 			IsValid = true;
 			Tag = UidGenerator.New();
-			Pages = pageNum;
+			Pages = new List<int>(pageNum);
 		}
 	}
 }

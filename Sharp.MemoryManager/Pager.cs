@@ -18,6 +18,7 @@ namespace Sharp.MemoryManager
 		private const string TRANSACTION_MUTEX_SUFFIX = "_TRANSACTION_SYNC_MUTEX";
 		private const int PAGE_DATA_SIZE = 8; //8 bytes in each page
 		private const double FREE_SPACE_MARGIN_PERCENT = 1.1; //how much free space to reserve in hard drive
+		private const int DEFAULT_DATA_CAPACITY = Int32.MaxValue; //default around 2GB of capacity
 		#endregion
 
 		#region Private Members
@@ -39,7 +40,7 @@ namespace Sharp.MemoryManager
 
 		#region Constructor(s)
 
-		public Pager(string storageName, int dataCapacity)
+		public Pager(string storageName, int dataCapacity = DEFAULT_DATA_CAPACITY)
 		{
 			m_StorageName = storageName;			
 
@@ -82,7 +83,7 @@ namespace Sharp.MemoryManager
 				var pageCount = capacity / pageDataSize;
 				m_TotalPagerSize = Constants.Signature.Length +
 								   Constants.StorageHeaderSize +
-								   (Constants.SizeOfInt * pageCount) + //free page offset table
+								   (Constants.SizeOfBool * pageCount) + //free page offset table
 								   (Constants.SizeOfInt * pageCount) + //page offset table
 								   (Constants.SizeOfInt * pageCount) + //page header offset table
 								   (Constants.PageHeaderSize * pageCount * 2) + //reserve space for 2 copies of each page header
@@ -153,12 +154,19 @@ namespace Sharp.MemoryManager
 
 		#region Public Methods
 
-		public Transaction NewTransaction()
+		public Transaction NewTransaction(int transactionTimeout = Constants.NoLockTimeout)
 		{
 			ThrowIfDisposed();
-			var syncReleaseObj = m_TransactionSyncProvider.Lock();
+			try
+			{
+				var syncReleaseObj = m_TransactionSyncProvider.Lock(transactionTimeout);
 
-			return new Transaction(syncReleaseObj.Dispose,CopyPageAndFetchOffset);
+				return new Transaction(syncReleaseObj.Dispose, CopyPageAndFetchOffset);
+			}
+			catch (TimeoutException e)
+			{
+				throw new TimeoutException("Unable to start new transaction within defined timeout. ", e);
+			}
 		}
 
 		public IEnumerable<byte> Get(DataHandle handle,bool shouldUseConcurrencyTag = false)
@@ -168,37 +176,55 @@ namespace Sharp.MemoryManager
 			if (!ArePagesAllocated(handle))
 				return null;
 
-			var data = new byte[handle.Pages.Count() * m_StorageHeader->PageDataSize];
-			var actualDataSize = 0;
-			foreach (var pageNum in handle.Pages)
-			{
-				var pageHeader = (PageHeader*)(m_BaseStoragePointer + m_StorageHeader->PageHeaderOffsets[pageNum]);
+			int actualDataSize;
+			var data = GetInternal(handle,
+								   pageNum => m_StorageHeader->PageHeaderOffsets[pageNum],
+								   pageNum => m_StorageHeader->PageOffsets[pageNum],
+								   shouldUseConcurrencyTag, out actualDataSize);
 
-				//check the tag only once, assumption that all allocated pages have their tag changed together (when Set() method executes)
-				if (shouldUseConcurrencyTag && new UidTag(pageHeader->TagBytes) != handle.Tag) 
-				{
-					throw new ConcurrencyException("cannot fetch data, it has been changed - concurrency tags mismatch");
-				}
+			return data.Take(actualDataSize);
+		}
 
-				var pageData = m_BaseStoragePointer + m_StorageHeader->PageOffsets[pageNum];
-				
-				fixed (byte* dataPtr = data)
-					NativeMethods.memcpy(dataPtr + actualDataSize, pageData, pageHeader->DataSize);
-				
-				actualDataSize += pageHeader->DataSize;
-			}
+		public IEnumerable<byte> Get(Transaction tx,DataHandle handle, bool shouldUseConcurrencyTag = false)
+		{
+			Validate(handle);
+			ThrowIfDisposed();
+			if (!ArePagesAllocated(handle))
+				return null;
+
+			var pageWriteOffsets = tx.CopyPagesAndFetchOffsets(handle);
+			int actualDataSize;
+			var data = GetInternal(handle,
+								   pageNum => pageWriteOffsets[pageNum].PageHeaderOffset,
+								   pageNum => pageWriteOffsets[pageNum].PageDataOffset,
+								   shouldUseConcurrencyTag, out actualDataSize);
 
 			return data.Take(actualDataSize);
 		}
 
 		public void Set(Transaction tx, DataHandle handle, byte[] data, bool shouldUseConcurrencyTag = false)
 		{
-			Validate(handle,data);
+			Validate(handle, data);
 			ThrowIfDisposed();
-			
 
-			//do not forget to check data size and allocated page size (that in handle)
-			throw new NotImplementedException();
+			var pageWriteOffsets = tx.CopyPagesAndFetchOffsets(handle);
+			var pageIndex = 0;
+			
+			fixed(byte* dataPtr = data)
+				foreach (var pageNum in handle.Pages)
+				{
+					var pageHeader = Header(pageWriteOffsets[pageNum].PageHeaderOffset);
+					var pageData = Data(pageWriteOffsets[pageNum].PageDataOffset);
+					
+					var srcDataOffset = pageIndex * m_StorageHeader->PageDataSize;
+					var dataLengthDifference = data.Length - srcDataOffset;
+					var dataSize = dataLengthDifference < m_StorageHeader->PageDataSize ? dataLengthDifference : m_StorageHeader->PageDataSize;
+					pageHeader->DataSize = dataSize;
+
+					NativeMethods.memcpy(pageData, dataPtr + srcDataOffset, PageDataSize);
+
+					pageIndex++;
+				}
 		}
 
 		public void Delete(Transaction tx, DataHandle handle, bool shouldUseConcurrencyTag = false)
@@ -252,8 +278,18 @@ namespace Sharp.MemoryManager
 		}
 
 		#endregion
-		//6e545ec
+
 		#region Transaction Related Methods
+
+		private Tuple<int,int> CopyPageRangeAndFetchOffsets(int startPageNum, int endPageNum)
+		{
+			var sourceSet = PageSetByAbsoluteOffset(m_StorageHeader->PageOffsets[startPageNum]);
+			if (sourceSet == PageSet.NotASet) throw new InvalidDataException("Invalid page set for page number = " + pageNum);
+
+			var destinationSet = sourceSet == PageSet.SetA ? PageSet.SetB : PageSet.SetA;
+
+			throw new NotImplementedException();
+		}
 
 		private PageOffsets CopyPageAndFetchOffset(int pageNum)
 		{
@@ -278,6 +314,41 @@ namespace Sharp.MemoryManager
 		#endregion
 
 		#region Helper Methods
+
+		private byte[] GetInternal(DataHandle handle, Func<int, int> headerOffsetRetriever, Func<int, int> dataOffsetRetriever, bool shouldUseConcurrencyTag, out int actualDataSize)
+		{
+			var data = new byte[handle.Pages.Count() * m_StorageHeader->PageDataSize];
+			actualDataSize = 0;
+			fixed (byte* dataPtr = data)
+				foreach (var pageNum in handle.Pages)
+				{
+					var pageHeader = Header(headerOffsetRetriever(pageNum));
+	
+					//check the tag only once, assumption that all allocated pages have their tag changed together (when Set() method executes)
+					if (shouldUseConcurrencyTag && new UidTag(pageHeader->TagBytes) != handle.Tag)
+					{
+						throw new ConcurrencyException("cannot fetch data, it has been changed - concurrency tags mismatch");
+					}
+	
+					var pageData = Data(dataOffsetRetriever(pageNum));
+	
+					NativeMethods.memcpy(dataPtr + actualDataSize, pageData, pageHeader->DataSize);
+	
+					actualDataSize += pageHeader->DataSize;
+				}
+
+			return data;
+		}
+
+		private PageHeader* Header(int headerOffset)
+		{
+			return (PageHeader*)(m_BaseStoragePointer + headerOffset);
+		}
+
+		private byte* Data(int dataOffset)
+		{
+			return m_BaseStoragePointer + dataOffset;
+		}
 
 		private bool ArePagesAllocated(DataHandle handle)
 		{
