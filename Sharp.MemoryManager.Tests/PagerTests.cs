@@ -22,36 +22,55 @@ namespace Sharp.MemoryManager.Tests
 		}
 
 		[TestMethod]
-		public void Pager_SingleAllocation_ProperPagesAllocated()
+		public void Pager_SingleAllocation_ProperlyAllocated()
 		{
 			const int ALLOCATION_SIZE = 128;
-			using (var pager = new Pager("TestStorage", 1024)) 
+			using (var pager = new Pager("TestStorage", 1024))
 			{
 				var handle = pager.Allocate(ALLOCATION_SIZE);
-				var totalAllocatedSize = handle.Pages.Count() * pager.PageDataSize;
 
-				handle.Pages.Should().OnlyHaveUniqueItems();
-				totalAllocatedSize.Should().BeGreaterOrEqualTo(ALLOCATION_SIZE);	
-			} 
-		}
+				handle.Should().NotBeNull();
+				var totalAllocatedSize = handle.SegmentSize;
 
-		[TestMethod]
-		public void Pager_MultipleAllocations_ProperPagesAllocated()
-		{
-			const int ALLOCATION_SIZE = 128;
-			var allocatedHandles = new List<DataHandle>();
-			using (var pager = new Pager("TestStorage", 1024 * 4))
-			{
-
-				for(int allocationIndex = 0; allocationIndex < 4; allocationIndex++)
-					allocatedHandles.Add(pager.Allocate(ALLOCATION_SIZE));
-
-				allocatedHandles.SelectMany(handle => handle.Pages).Should().OnlyHaveUniqueItems();
-				allocatedHandles.ForEach(handle => handle.Pages.Should().OnlyHaveUniqueItems());
-				allocatedHandles.ForEach(handle => ALLOCATION_SIZE.Should().BeLessOrEqualTo(handle.Pages.Count() * pager.PageDataSize));
+				totalAllocatedSize.Should().BeGreaterOrEqualTo(ALLOCATION_SIZE);
 			}
 		}
 
+		[TestMethod]
+		public void Pager_MultipleAllocations_DifferentSegmentsAllocated()
+		{
+			const int ALLOCATION_SIZE = 128;
+			const int ALLOCATION_COUNT = 5;
+			using (var pager = new Pager("TestStorage", 1024))
+			{
+				var allocatedHandles = new List<DataHandle>();
+				for(int index = 0; index < ALLOCATION_COUNT; index++)
+				   allocatedHandles.Add(pager.Allocate(ALLOCATION_SIZE));
+
+				allocatedHandles.Should().NotContainNulls();
+				
+				allocatedHandles.Select(handle => handle.SegmentIndex)
+								.Should().OnlyHaveUniqueItems();
+
+				allocatedHandles.Select(handle => handle.SegmentSize)
+								.All(handle => handle == ALLOCATION_SIZE)
+								.Should().BeTrue();
+			}
+		}
+
+		[TestMethod]
+		public void Pager_MultipleAllocations_NoAllocationSpaceLeft_ExceptionThrown()
+		{
+			using (var pager = new Pager("TestStorage", 256))
+			{
+				var allocatedHandles = new List<DataHandle>();
+				var handle128 = pager.Allocate(128);
+				var handle64_1 = pager.Allocate(64);
+				var handle64_2 = pager.Allocate(64);
+
+
+			}
+		}
 
 		[TestMethod]
 		public void Pager_Allocation_Freeing_Cannot_Free_Twice()
@@ -62,7 +81,7 @@ namespace Sharp.MemoryManager.Tests
 				var handle = pager.Allocate(ALLOCATION_SIZE);
 				pager.Free(handle);
 
-				Assert.Throws<InvalidDataException>(() => pager.Free(handle));
+				Assert.Throws<ArgumentException>(() => pager.Free(handle));
 			}
 		}
 
@@ -78,7 +97,10 @@ namespace Sharp.MemoryManager.Tests
 				var handle2 = pager.Allocate(ALLOCATION_SIZE);
 				pager.Free(handle2);
 
-				handle1.Pages.ShouldBeEquivalentTo(handle2.Pages);
+				handle1.ShouldHave()
+					   .Properties(obj => obj.SegmentIndex,
+								   obj => obj.SegmentSize)
+					   .EqualTo(handle2);	  
 
 				handle1.IsValid.Should().BeFalse();
 				handle2.IsValid.Should().BeFalse();
