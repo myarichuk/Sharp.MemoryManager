@@ -12,11 +12,9 @@ namespace Sharp.MemoryManager
 	{
 		public int Version;
 		public int PageDataSize;
-		public int TotalPageCount;
-		public int LastFreePageNum;
-		public int FreePageCount;
-		public bool* FreePageFlags;
-		public int* PageOffsets;
-		public int* PageHeaderOffsets;
+		public long TotalPageCount;
+		public long SegmentListCount;
+		public long* PageOffsets;
+		public SegmentListHeader* SegmentListHeaders;
 	}
 }

@@ -5,22 +5,19 @@ using System.Text;
 
 namespace Sharp.MemoryManager
 {
-	public class DataHandle
+	public class SegmentHandle
 	{
-		public int SegmentSize { get; private set; }
-
-		public int SegmentIndex { get; private set; }
+		public IEnumerable<int> Pages { get; private set; }
 		
 		public UidTag Tag { get; private set; }
 
 		public bool IsValid { get; internal set; }
 
-		internal DataHandle(int segmentSize, int segmentIndex)
+		internal SegmentHandle(IEnumerable<int> pageNum)
 		{
 			IsValid = true;
 			Tag = UidGenerator.New();
-			SegmentIndex = segmentIndex;
-			SegmentSize = segmentSize;
+			Pages = new List<int>(pageNum);
 		}
 	}
 }

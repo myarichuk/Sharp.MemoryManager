@@ -44,8 +44,10 @@
     <Compile Include="ConcurrencyException.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="DataObjects\DataHandle.cs" />
-    <Compile Include="DataObjects\OperationType.cs" />
+    <Compile Include="DataObjects\SegmentInfo.cs" />
+    <Compile Include="DataObjects\AllocationStatus.cs" />
     <Compile Include="Headers\PageHeader.cs" />
+    <Compile Include="Headers\SegmentListHeader.cs" />
     <Compile Include="Headers\StorageHeader.cs" />
     <Compile Include="PageOffsets.cs" />
     <Compile Include="PageSet.cs" />
